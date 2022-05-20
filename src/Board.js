@@ -33,7 +33,8 @@ import "./Board.css";
 function Board({ nrows = 5, ncols = 5, chanceLightStartsOn = .25}){
 
     //state to manage board in play
-    const [board, setBoard] = useState(createBoard);
+    const [board, setBoard] = useState(createBoard());
+    // console.log("line 37, board: ", board);
 
     /** creates board nrows high/ncols wide */
     function createBoard(){
@@ -50,7 +51,8 @@ function Board({ nrows = 5, ncols = 5, chanceLightStartsOn = .25}){
             initialBoard.push(row);
         }
         //update board state with board that has randomly flipped Cells
-        setBoard(flipRandomCells(initialBoard));
+        // console.log("line 54, initialBoard = ", initialBoard);
+        return flipRandomCells(initialBoard);
     }
 
     /** Flips a cell and the four cells around it (top, right, bottom, left) 
@@ -63,7 +65,7 @@ function Board({ nrows = 5, ncols = 5, chanceLightStartsOn = .25}){
      * - a deep copy of the board but with the selected <Cell /> 
      *   and its surrounding Cells flipped
      */
-    function flipCellsAround(coord){
+    function flipCellsAround(coord, gameBoard){
         //split coord str on "-"
         //map over them, converting each part of the coord to a #
        const [y, x] = coord.split("-").map(Number);
@@ -71,29 +73,34 @@ function Board({ nrows = 5, ncols = 5, chanceLightStartsOn = .25}){
        //if this coord is actually on board, flip it
        //this is just a function expression; an anon arrow fn saved to a variable
        //can be called like: flipCell(y, x, boardCopy)
-       const flipCell = (y, x, boardCopy) => {
+       const flipCell = (y, x, board) => {
         if (y >= 0 && y < nrows && x >= 0 && x < ncols){
-            boardCopy[y][x] = !boardCopy[y][x];
+            board[y][x] = !board[y][x];
             //since each Cell is a bool in a subarr,
             //this will flip the bool to its opposite bool
         }
        }
 
+       /** we don't need this because we separated this fn from setBoard, don't need a deep copy for a new identity any more, just mutating the board and returning it */
+
        //we need to give the board we're going to update a new identity
        //a deep copy, not a shallow copy
        //or else React won't detect any changes (ref would otherwise be same)
-       const newBoard = board.map(row => [...row]);
+    //    const newBoard = board.map(row => [...row]);
        //need to spread each subarr/row, otherwise newBoard = [...board]
        //would just be a new arr of refs to the old subarrs
 
-       //now flip the selected Cell and its surrounding Cells
-       flipCell(y, x, newBoard);
-       flipCell(y - 1, x, newBoard);
-       flipCell(y + 1, x, newBoard);
-       flipCell(y, x - 1, newBoard);
-       flipCell(y, x + 1, newBoard);
 
-       return newBoard;
+
+       //now flip the selected Cell and its surrounding Cells
+       flipCell(y, x, gameBoard);
+       flipCell(y - 1, x, gameBoard);
+       flipCell(y + 1, x, gameBoard);
+       flipCell(y, x - 1, gameBoard);
+       flipCell(y, x + 1, gameBoard);
+
+       //return mutated game board
+       return gameBoard;
     }
   
     /** Randomly flips Cells (and their surrounding Cells) on a board 
@@ -102,40 +109,64 @@ function Board({ nrows = 5, ncols = 5, chanceLightStartsOn = .25}){
      * - board: the current game board, array-of-arrays of true/false
      * 
      * Returns:
-     * - a deep copy of the board but with random flipped Cells
+     * - a shallow copy of the board, mutated with random flipped Cells
      */
-    function flipRandomCells(board){
+    function flipRandomCells(gameBoard){
         for(let row = 0; row < nrows; row++){
             for(let col = 0; col < ncols; col++){
-                if(Math.random() > chanceLightStartsOn){
-                    flipCellsAround(`${row}-${col}`);
+                if(Math.random() < chanceLightStartsOn){
+                    flipCellsAround(`${row}-${col}`, gameBoard);
                 }
             }
         }
+        // console.log("line 120, gameBoard: ", gameBoard);
+        return gameBoard;
     }
 
     /** Checks for game win condition
      * 
      * Arguments: 
-     * - board: the state of the board in play
+     * - gameBoard: the state of the board in play
      * 
      * Returns:
      * - boolean: 
      *      true if all Cells are true/flipped/"on"
      *      false if any Cells are false/unflipped/"off"
      */
-    function hasWon(board){
-        for(let row of board){
-            if(row.contains(false) === true){
+    function hasWon(gameBoard){
+        // console.log("line 134 gameBoard: ", gameBoard);
+        for(let row of gameBoard){
+            if(row.includes(false) === true){
                 return false;
             }
         }
         return true;
     }
 
+    /** Updates the state of the board when a Cell is clicked
+     * 
+     * Arguments: 
+     * - clickedCellCoord: a str of coordinates for the clicked <Cell />, 
+     *   row and column
+     *      like "2-5" (`${y}-${x}` or `${row}-${col}`)
+     * - gameBoard: the state of the board in play
+     * 
+     * Returns: 
+     * - undefined (nothing explicit)
+     */
+    function flipCellOnClick(clickedCellCoord, gameBoard){
+        //take the game board and flip the clicked Cell and its surrounding Cells
+        const updatedBoard = flipCellsAround(clickedCellCoord, gameBoard);
+        //create a new identity, or else React won't detect any changes (ref would otherwise be same
+        const newBoardIdentity = updatedBoard.map(row => [...row]);
+        //update state with new board identity
+        setBoard(newBoardIdentity);
+    }
+
+
    return (
        <div className="Board board container">
-           { hasWon() === false &&
+           { hasWon(board) === false &&
                <table className="board table">
                    <tbody className="board">
                         { board.map((row, rowIdx) =>
@@ -143,7 +174,7 @@ function Board({ nrows = 5, ncols = 5, chanceLightStartsOn = .25}){
                                 { row.map((col, colIdx) => 
                                     <Cell 
                                         key={`${rowIdx}-${colIdx}`}
-                                        flipCellsAroundMe={evt => flipCellsAround(`${rowIdx}-${colIdx}`)}
+                                        flipCellsAroundMe={evt => flipCellOnClick(`${rowIdx}-${colIdx}`, board)}
                                         isLit={board[rowIdx][colIdx]}
                                     />    
                                 )}
@@ -153,7 +184,7 @@ function Board({ nrows = 5, ncols = 5, chanceLightStartsOn = .25}){
                     {/* don't forget the tbody in the table! otherwise annoying errors pop up */}
                </table>
            }
-           { hasWon() === true &&
+           { hasWon(board) === true &&
                 <div className="Board winMsg container">
                     <p className="winMsg">
                         "You've won! Congrats on being a CHAMPION!"
